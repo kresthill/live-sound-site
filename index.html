@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sound Optimization Pipeline</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: #e2e8f0;
+            position: relative;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #f1f1f4, #f6f6f7, #eef0f1);
+        }
+
+        /* Central speaker container */
+        .speaker-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 220px;
+            height: 220px;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            animation: speakerPulse 3s ease-in-out infinite;
+            cursor: pointer;
+        }
+
+
+        .speaker-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        /* Speaker SVG fallback */
+        .speaker-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Mobile speaker sizing */
+        @media (max-width: 768px) {
+            .speaker-container {
+                width: 120px;
+                height: 120px;
+                top: 35%;
+            }
+        }
+
+        /* Page System */
+        .page {
+            display: none;
+            min-height: 100vh;
+            position: relative;
+            z-index: 2;
+            padding: 20px;
+        }
+
+        .page.active {
+            display: block;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Navigation arrows */
+        .nav-arrows {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 200;
+        }
+
+        .nav-arrow {
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid #10b981;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-arrow:hover {
+            background: rgba(16, 185, 129, 0.2);
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(2, 247, 169, 0.244);
+        }
+
+        .nav-arrow.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            border-color: #64748b;
+        }
+
+        .nav-arrow.disabled:hover {
+            transform: none;
+            background: rgba(30, 41, 59, 0.9);
+            box-shadow: none;
+        }
+
+        .nav-arrow svg {
+            width: 24px;
+            height: 24px;
+            fill: #10b981;
+        }
+
+        .nav-arrow.disabled svg {
+            fill: #64748b;
+        }
+
+        /* Main Pipeline Styles */
+        .pipeline-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            padding: 20px;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            z-index: 100;
+            position: relative;
+        }
+
+        .title {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(25, 145, 145, 0.5);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #740f0f;
+            opacity: 0.9;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Mobile header adjustments */
+        @media (max-width: 768px) {
+            .title {
+                font-size: 1.5em;
+                line-height: 1.2;
+            }
+            
+            .subtitle {
+                font-size: 0.9em;
+            }
+            
+            .header {
+                margin-bottom: 15px;
+            }
+        }
+
+        /* Pipeline container for modules */
+        .pipeline {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+        }
+
+        /* Module styles - initially hidden, no background containers */
+        .module {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: absolute;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.8);
+        }
+
+        /* Show modules when active */
+        .modules-visible .module {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1);
+        }
+
+        /* Position modules around the speaker in a circle - CLOSER SPACING, NO CONNECTING LINES */
+        .module:nth-child(1) { /* Audio Input - Top */
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%) scale(0.8);
+            transition-delay: 0.1s;
+        }
+        .modules-visible .module:nth-child(1) {
+            transform: translateX(-50%) scale(1);
+        }
+
+        .module:nth-child(2) { /* Audio Capture - Top Right */
+            top: 25%;
+            right: 25%;
+            transition-delay: 0.2s;
+        }
+
+        .module:nth-child(3) { /* Audio Analyzer - Right */
+            top: 50%;
+            right: 18%;
+            transform: translateY(-50%) scale(0.8);
+            transition-delay: 0.3s;
+        }
+        .modules-visible .module:nth-child(3) {
+            transform: translateY(-50%) scale(1);
+        }
+
+        .module:nth-child(4) { /* Quality Scoring - Bottom Right */
+            bottom: 25%;
+            right: 25%;
+            transition-delay: 0.4s;
+        }
+
+        .module:nth-child(5) { /* Bayesian Optimizer - Bottom */
+            bottom: 15%;
+            left: 50%;
+            transform: translateX(-50%) scale(0.8);
+            transition-delay: 0.5s;
+        }
+        .modules-visible .module:nth-child(5) {
+            transform: translateX(-50%) scale(1);
+        }
+
+        .module:nth-child(6) { /* Real-time Optimizer - Bottom Left */
+            bottom: 25%;
+            left: 25%;
+            transition-delay: 0.6s;
+        }
+
+        .module:nth-child(7) { /* LV1 Integration - Left */
+            top: 50%;
+            left: 15%;
+            transform: translateY(-50%) scale(0.8);
+            transition-delay: 0.7s;
+        }
+        .modules-visible .module:nth-child(7) {
+            transform: translateY(-50%) scale(1);
+        }
+
+        /* Mobile layout adjustments - CLOSER SPACING, NO CONNECTING LINES */
+        @media (max-width: 768px) {
+            .module:nth-child(1) { /* Audio Input */
+                top: 12%;
+                left: 50%;
+            }
+
+            .module:nth-child(2) { /* Audio Capture */
+                top: 22%;
+                right: 18%;
+            }
+
+            .module:nth-child(3) { /* Audio Analyzer */
+                top: 50%;
+                right: 12%;
+            }
+
+            .module:nth-child(4) { /* Quality Scoring */
+                bottom: 22%;
+                right: 18%;
+            }
+
+            .module:nth-child(5) { /* Bayesian Optimizer */
+                bottom: 12%;
+                left: 50%;
+            }
+
+            .module:nth-child(6) { /* Real-time Optimizer */
+                bottom: 22%;
+                left: 18%;
+            }
+
+            .module:nth-child(7) { /* LV1 Integration */
+                top: 50%;
+                left: 8%;
+            }
+        }
+
+        .module:hover {
+            transform: scale(1.1);
+        }
+
+        @media (max-width: 768px) {
+            .module:nth-child(1):hover,
+            .modules-visible .module:nth-child(1):hover {
+                transform: translateX(-50%) scale(1.1);
+            }
+            
+            .module:nth-child(3):hover,
+            .modules-visible .module:nth-child(3):hover {
+                transform: translateY(-50%) scale(1.1);
+            }
+            
+            .module:nth-child(5):hover,
+            .modules-visible .module:nth-child(5):hover {
+                transform: translateX(-50%) scale(1.1);
+            }
+            
+            .module:nth-child(7):hover,
+            .modules-visible .module:nth-child(7):hover {
+                transform: translateY(-50%) scale(1.1);
+            }
+            
+            .module:nth-child(2):hover,
+            .module:nth-child(4):hover,
+            .module:nth-child(6):hover {
+                transform: scale(1.1);
+            }
+        }
+
+        .module-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        @media (max-width: 768px) {
+            .module-icon {
+                font-size: 2em;
+                margin-bottom: 8px;
+            }
+        }
+
+        /* Sound Wave Icon */
+        .sound-wave-icon {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        .sound-wave-bar {
+            width: 5px;
+            background-color: currentColor;
+            border-radius: 3px;
+            animation: soundWave 1.5s ease-in-out infinite;
+        }
+
+        .sound-wave-bar:nth-child(1) { height: 35px; animation-delay: 0s; }
+        .sound-wave-bar:nth-child(2) { height: 20px; animation-delay: 0.1s; }
+        .sound-wave-bar:nth-child(3) { height: 45px; animation-delay: 0.2s; }
+        .sound-wave-bar:nth-child(4) { height: 25px; animation-delay: 0.3s; }
+        .sound-wave-bar:nth-child(5) { height: 15px; animation-delay: 0.4s; }
+        .sound-wave-bar:nth-child(6) { height: 30px; animation-delay: 0.5s; }
+        .sound-wave-bar:nth-child(7) { height: 40px; animation-delay: 0.6s; }
+
+        @keyframes soundWave {
+            0%, 100% { transform: scaleY(1); opacity: 0.7; }
+            50% { transform: scaleY(1.3); opacity: 1; }
+        }
+
+        .module-title {
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 0;
+            margin-top: 8px;
+            color: #1e293b;
+            text-shadow: none;
+        }
+
+        .module-description {
+            font-size: 0.8em;
+            color: #64748b;
+            line-height: 1.3;
+            text-shadow: none;
+            margin-top: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .module-title {
+                font-size: 0.9em;
+                margin-top: 6px;
+            }
+            
+            .module-description {
+                font-size: 0.75em;
+                line-height: 1.4;
+            }
+        }
+
+        /* Satellite Dish Icon */
+        .satellite-dish-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .dish {
+            width: 35px;
+            height: 35px;
+            border: 3px solid currentColor;
+            border-radius: 50%;
+            border-right-color: black;
+            border-bottom-color: transparent;
+            position: relative;
+            animation: dishRotate 2s ease-in-out infinite;
+        }
+
+        .dish-pole {
+            width: 2px;
+            height: 12px;
+            background-color: currentColor;
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .dish-base {
+            width: 10px;
+            height: 3px;
+            background-color: currentColor;
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+
+        .signal-wave {
+            position: absolute;
+            border: 1px solid currentColor;
+            border-radius: 50%;
+            animation: signalPulse 2s ease-in-out infinite;
+        }
+
+        .signal-wave:nth-child(1) {
+            width: 40px;
+            height: 40px;
+            top: 5px;
+            left: 5px;
+            animation-delay: 0s;
+        }
+
+        .signal-wave:nth-child(2) {
+            width: 50px;
+            height: 50px;
+            top: 0px;
+            left: 0px;
+            animation-delay: 0.3s;
+        }
+
+        .signal-wave:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            top: -5px;
+            left: -5px;
+            animation-delay: 0.6s;
+        }
+
+        @keyframes dishRotate {
+            0%, 100% { transform: rotate(-45deg); }
+            50% { transform: rotate(-35deg); }
+        }
+
+        @keyframes signalPulse {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 0.6; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.2); }
+        }
+
+        /* Bar Graph Icon */
+        .bar-graph-icon {
+            display: inline-flex;
+            align-items: flex-end;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+            border-color: black;
+        }
+
+        .chart-bar {
+            width: 5px;
+            background-color: currentColor;
+            border-radius: 2px 2px 0 0;
+            margin: 0 1px;
+            position: relative;
+            animation: dataAnalysis 4s linear infinite;
+        }
+
+        .chart-bar:nth-child(1) { height: 12px; animation-delay: 0s; }
+        .chart-bar:nth-child(2) { height: 20px; animation-delay: 0.8s; }
+        .chart-bar:nth-child(3) { height: 28px; animation-delay: 1.6s; }
+        .chart-bar:nth-child(4) { height: 35px; animation-delay: 2.4s; }
+        .chart-bar:nth-child(5) { height: 30px; animation-delay: 3.2s; }
+
+        @keyframes dataAnalysis {
+            0% { opacity: 0.4; transform: scaleY(0.8); }
+            25% { opacity: 1; transform: scaleY(1.1); box-shadow: 0 0 8px currentColor; }
+            50% { opacity: 0.7; transform: scaleY(1); }
+            75% { opacity: 0.9; transform: scaleY(1.05); }
+            100% { opacity: 0.4; transform: scaleY(0.8); }
+        }
+
+        /* Star Rating Icon */
+        .star-rating-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            width: 80px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .star {
+            width: 15px;
+            height: 15px;
+            position: relative;
+            opacity: 0;
+            transform: scale(0);
+            animation: starAppear 5s ease-in-out infinite;
+        }
+
+        .star::before {
+            content: '★';
+            color: #fbbf24;
+            font-size: 15px;
+            position: absolute;
+            top: -3px;
+            left: -1px;
+        }
+
+        .star:nth-child(1) { animation-delay: 0s; }
+        .star:nth-child(2) { animation-delay: 0.4s; }
+        .star:nth-child(3) { animation-delay: 0.8s; }
+        .star:nth-child(4) { animation-delay: 1.2s; }
+        .star:nth-child(5) { animation-delay: 1.6s; }
+
+        @keyframes starAppear {
+            0%, 20% { opacity: 0; transform: scale(0) rotate(0deg); }
+            25% { opacity: 1; transform: scale(1.3) rotate(72deg); }
+            30% { opacity: 1; transform: scale(1) rotate(0deg); }
+            90% { opacity: 1; transform: scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        }
+
+        /* Brain Icon */
+        .brain-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .brain-left, .brain-right {
+            width: 20px;
+            height: 35px;
+            border: 2px solid currentColor;
+            border-radius: 10px 3px 6px 10px;
+            position: relative;
+            background: transparent;
+            animation: brainPulse 3s ease-in-out infinite;
+        }
+
+        .brain-right {
+            border-radius: 3px 10px 10px 6px;
+            margin-left: 2px;
+            animation-delay: 0.3s;
+        }
+
+        @keyframes brainPulse {
+            0%, 100% { border-color: currentColor; opacity: 0.7; }
+            50% { border-color: #10b981; opacity: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5)); }
+        }
+
+        /* Gear System Icon */
+        .gear-system-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .gear-large {
+            width: 30px;
+            height: 30px;
+            border: 3px solid currentColor;
+            border-radius: 50%;
+            position: absolute;
+            animation: gearRotate 4s linear infinite;
+        }
+
+        .gear-large::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            right: -6px;
+            bottom: -6px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            clip-path: polygon(
+                50% 0%, 60% 10%, 90% 10%, 90% 40%, 60% 40%, 50% 50%,
+                40% 40%, 10% 40%, 10% 10%, 40% 10%
+            );
+        }
+
+        .gear-small {
+            width: 18px;
+            height: 18px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            position: absolute;
+            top: 20px;
+            right: 5px;
+            animation: gearRotate 3s linear infinite reverse;
+        }
+
+        @keyframes gearRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Module Colors for icons */
+        .audio-input .sound-wave-icon { color: #ef4444; }
+        .audio-capture .satellite-dish-icon { color: #3b82f6; }
+        .audio-analyzer .bar-graph-icon { color: #3b82f6; }
+        .quality-scoring .star-rating-icon { color: #3b82f6; }
+        .bayesian-optimizer .brain-icon { color: #3b82f6; }
+        .realtime-optimizer .gear-system-icon { color: #3b82f6; }
+        .lv1-integration .module-icon { color: #ec4899; }
+
+        /* Statistics Panel */
+        .stats-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(15px);
+            border: 2px solid #475569;
+            border-radius: 15px;
+            padding: 20px;
+            width: 280px;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .stats-panel {
+                position: relative;
+                width: calc(100% - 40px);
+                margin: 20px auto 0;
+                top: auto;
+                right: auto;
+                order: -1;
+            }
+
+            .pipeline-container {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .pipeline {
+                order: 1;
+            }
+        }
+
+        .stats-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #10b981;
+            text-align: center;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 6px 0;
+            border-bottom: 1px solid #334155;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #cbd5e1;
+            font-size: 0.8em;
+        }
+
+        .stat-value {
+            color: #10b981;
+            font-weight: 600;
+            font-size: 0.8em;
+        }
+
+        .activity-indicator {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, rgba(45, 69, 30, 0.9), rgba(52, 188, 134, 0.9));
+            backdrop-filter: blur(15px);
+            border: 1px solid #475569;
+            border-radius: 20px;
+            padding: 12px 25px;
+            font-size: 0.9em;
+            color: #e2e8f0;
+            z-index: 100;
+            min-width: 250px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            .activity-indicator {
+                position: relative;
+                bottom: auto;
+                left: auto;
+                transform: none;
+                margin: 20px auto;
+                min-width: auto;
+                width: calc(100% - 40px);
+                font-size: 0.85em;
+                padding: 15px 20px;
+            }
+        }
+
+        /* Processing animation - simplified for icons only */
+        .module.processing {
+            animation: processingGlow 1.2s ease-in-out;
+        }
+
+        .module.processing .module-icon,
+        .module.processing .sound-wave-icon,
+        .module.processing .satellite-dish-icon,
+        .module.processing .bar-graph-icon,
+        .module.processing .star-rating-icon,
+        .module.processing .brain-icon,
+        .module.processing .gear-system-icon {
+            filter: drop-shadow(0 0 15px currentColor);
+        }
+
+        @keyframes processingGlow {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* Instruction text */
+        .instruction-text {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #64748b;
+            font-size: 1.1em;
+            text-align: center;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+            z-index: 40;
+        }
+
+        .modules-visible .instruction-text {
+            opacity: 0;
+        }
+
+        @media (max-width: 768px) {
+            .instruction-text {
+                top: 55%;
+                font-size: 0.95em;
+                padding: 0 20px;
+            }
+        }
+
+        /* Detail Page Styles */
+        .detail-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px 120px;
+            color: #1e293b;
+            background: rgba(26, 27, 31, 0.95);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .detail-header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: linear-gradient(135deg, rgba(20, 236, 5, 0.1), rgba(12, 96, 96, 0.128));
+            border-radius: 15px;
+        }
+
+        .detail-title {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #7fb706;
+            margin-bottom: 20;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #4fe02eca, #764ba2, #f093fb);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .detail-subtitle {
+            font-size: 1.2em;
+            color: #f8fafca7;
+            margin-bottom: 20px;
+        }
+
+        .detail-icon {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .detail-content {
+            background: rgba(219, 231, 203, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(58, 241, 3, 0.966);
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+        }
+
+        .detail-section h3 {
+            font-size: 1.4em;
+            color: #1e293b;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .detail-section p {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #475569;
+            margin-bottom: 15px;
+        }
+
+        .benefits-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .benefits-list li {
+            background: rgba(147, 234, 6, 0.128);
+            margin: 10px 0;
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-left: 4px solid #56b910;
+            font-size: 1em;
+            color: #1e293b;
+        }
+
+        .tech-specs {
+            background: rgba(27, 41, 1, 0.21);
+            border-radius: 15px;
+            padding: 20px;
+            border-left: 4px solid #10b981;
+        }
+
+        .tech-specs h4 {
+            color: #10b98176;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+
+        }
+
+        .tech-specs ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .tech-specs li {
+            padding: 5px 0;
+            color: #475569;
+        }
+
+        @media (max-width: 768px) {
+            .detail-page {
+                padding: 20px 15px 120px;
+            }
+
+            .detail-title {
+                font-size: 2em;
+            }
+
+            .detail-subtitle {
+                font-size: 1.1em;
+            }
+
+            .detail-content {
+                padding: 20px;
+            }
+
+            .nav-arrows {
+                bottom: 20px;
+            }
+
+            .nav-arrow {
+                width: 50px;
+                height: 50px;
+            }
+        }
+
+        /* Page indicator */
+        .page-indicator {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 41, 59, 0.9);
+            color: #e2e8f0;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            z-index: 200;
+            backdrop-filter: blur(10px);
+            border: 1px solid #475569;
+        }
+    </style>
+</head>
+<body>
+    <!-- Central Speaker -->
+    <div class="speaker-container" id="speaker">
+        <img class="speaker-svg" width="220" height="220" viewBox="0 0 160 160" src="images/speaker.jpg">
+            <defs>
+                <radialGradient id="speakerGradient" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" style="stop-color:#64748b;stop-opacity:1" />
+                    <stop offset="70%" style="stop-color:#334155;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+                </radialGradient>
+                <filter id="speakerShadow">
+                    <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="rgba(0,0,0,0.5)"/>
+                </filter>
+            </defs>
+            <!-- Speaker body -->
+            <circle cx="80" cy="80" r="55" fill="url(#speakerGradient)" filter="url(#speakerShadow)"/>
+            <!-- Speaker cone -->
+            <circle cx="80" cy="80" r="35" fill="none" stroke="#10b981" stroke-width="3"/>
+            <circle cx="80" cy="80" r="25" fill="none" stroke="#10b981" stroke-width="2.5"/>
+            <circle cx="80" cy="80" r="15" fill="none" stroke="#10b981" stroke-width="2"/>
+            <!-- Center dot -->
+            <circle cx="80" cy="80" r="6" fill="#10b981"/>
+            <!-- Sound waves -->
+            <path d="M 95 60 Q 105 70 95 80 Q 105 90 95 100" fill="none" stroke="#10b981" stroke-width="2" opacity="0.6">
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+            </path>
+            <path d="M 105 45 Q 120 65 105 85 Q 120 105 105 115" fill="none" stroke="#10b981" stroke-width="2" opacity="0.4">
+                <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+            </path>
+        </svg>
+    </div>
+
+    <!-- Page Indicator -->
+    <div class="page-indicator" id="page-indicator">Overview</div>
+
+    <!-- Navigation Arrows -->
+    <div class="nav-arrows">
+        <div class="nav-arrow" id="prev-arrow">
+            <svg viewBox="0 0 24 24">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+            </svg>
+        </div>
+        <div class="nav-arrow" id="next-arrow">
+            <svg viewBox="0 0 24 24">
+                <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Main Pipeline Page -->
+    <div class="page active" id="main-page">
+        <div class="pipeline-container" id="pipeline-container">
+            <div class="header">
+                <h1 class="title">Divinity Sound</h1>
+                <h1 class="title">Live Audio Optimization Pipeline</h1>
+                <p class="subtitle">Real-Time Intelligent Audio Processing & Console Control</p>
+            </div>            
+            <div class="pipeline">
+                <!-- Instruction Text -->
+                <div class="instruction-text">
+                    🎵 Click or hover over the speaker to explore the pipeline modules
+                </div>
+
+                <!-- Audio Input -->
+                <div class="module audio-input" id="audio-input">
+                    <div class="sound-wave-icon">
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                    </div>
+                    <h3 class="module-title">Audio Input</h3>
+                    <p class="module-description">Live audio sources & instruments</p>
+                </div>
+
+                <!-- Audio Capture -->
+                <div class="module audio-capture" id="audio-capture">
+                    <div class="satellite-dish-icon">
+                        <div class="signal-wave"></div>
+                        <div class="signal-wave"></div>
+                        <div class="signal-wave"></div>
+                        <div class="dish"></div>
+                        <div class="dish-pole"></div>
+                        <div class="dish-base"></div>
+                    </div>
+                    <h3 class="module-title">Audio Capture</h3>
+                    <p class="module-description">Real-time streaming & buffering</p>
+                </div>
+
+                <!-- Audio Analyzer -->
+                <div class="module audio-analyzer" id="audio-analyzer">
+                    <div class="bar-graph-icon">
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                    </div>
+                    <h3 class="module-title">Audio Analyzer</h3>
+                    <p class="module-description">Spectral analysis & feature extraction</p>
+                </div>
+
+                <!-- Quality Scoring -->
+                <div class="module quality-scoring" id="quality-scoring">
+                    <div class="star-rating-icon">
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                    </div>
+                    <h3 class="module-title">Quality Scoring</h3>
+                    <p class="module-description">AI quality assessment</p>
+                </div>
+
+                <!-- Bayesian Optimizer -->
+                <div class="module bayesian-optimizer" id="bayesian-optimizer">
+                    <div class="brain-icon">
+                        <div class="brain-left"></div>
+                        <div class="brain-right"></div>
+                    </div>
+                    <h3 class="module-title">AI Optimizer</h3>
+                    <p class="module-description">Bayesian parameter optimization</p>
+                </div>
+
+                <!-- Real-time Optimizer -->
+                <div class="module realtime-optimizer" id="realtime-optimizer">
+                    <div class="gear-system-icon">
+                        <div class="gear-large"></div>
+                        <div class="gear-small"></div>
+                    </div>
+                    <h3 class="module-title">Real-time Engine</h3>
+                    <p class="module-description">Live optimization orchestration</p>
+                </div>
+
+               <!-- LV1 Integration -->
+                <div class="module lv1-integration" id="lv1-integration">
+                    <div class="module-icon">
+                        <img width="50" height="40" viewBox="0 0 50 40" src="logo/istockphoto-622064544-612x612.jpg">
+                    </div>
+                    <h3 class="module-title">LV1 Console</h3>
+                    <p class="module-description">Professional console control</p>
+                </div>
+            </div>
+
+            <!-- Activity Indicator -->
+            <div class="activity-indicator">
+                <span class="activity-text" id="activity-text">🎵 Initializing AI optimization pipeline...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Input Detail Page -->
+    <div class="page" id="audio-input-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">Audio Input Module</h1>
+                <p class="detail-subtitle">Multi-Channel Live Audio Acquisition System</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The Audio Input Module serves as the primary gateway for capturing live audio signals from multiple sources simultaneously. This sophisticated system handles up to 128 channels of high-fidelity audio input, supporting various microphone types, instruments, and line-level sources. Built with professional-grade components, it ensures pristine signal quality with minimal noise interference and maximum dynamic range preservation.</p>
+                    
+                    <p>The module employs advanced analog-to-digital conversion technology with 32-bit resolution and sample rates up to 192 kHz, providing exceptional audio clarity that exceeds industry standards. Each input channel features independent gain control, phantom power delivery, and comprehensive signal monitoring capabilities.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Ultra-Low Latency:</strong> Processing delays under 2.5ms ensure real-time performance without perceptible lag during live events.</li>
+                        <li><strong>Professional Reliability:</strong> 99.99% uptime with redundant signal paths and automatic failover protection for mission-critical applications.</li>
+                        <li><strong>Scalable Architecture:</strong> Modular design allows expansion from basic setups to large-scale installations with hundreds of input channels.</li>
+                        <li><strong>Intelligent Gain Staging:</strong> Automatic level optimization prevents clipping while maximizing signal-to-noise ratio across all channels.</li>
+                        <li><strong>Universal Compatibility:</strong> Supports all standard microphone types, instruments, and professional audio equipment interfaces.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Input Channels:</strong> 128 simultaneous channels</li>
+                            <li><strong>Sample Rate:</strong> 48kHz - 192kHz selectable</li>
+                            <li><strong>Bit Depth:</strong> 32-bit floating point</li>
+                            <li><strong>Dynamic Range:</strong> 130 dB typical</li>
+                            <li><strong>Input Latency:</strong> &lt; 2.5ms at 48kHz</li>
+                            <li><strong>Phantom Power:</strong> +48V, switchable per channel</li>
+                            <li><strong>Connectivity:</strong> XLR, TRS, USB, Dante, MADI</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module excels in diverse professional audio environments including large-scale live concerts, broadcast studios, houses of worship, conference facilities, and recording studios. Its robust design makes it particularly valuable for applications requiring simultaneous capture of multiple vocalists, choir sections, orchestral instruments, and electronic sources.</p>
+                    
+                    <p>The system's intelligent preprocessing capabilities make it ideal for venues where audio sources vary significantly throughout events, automatically adapting to optimize capture quality for speech, musical instruments, and ambient audio sources.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Capture Detail Page -->
+    <div class="page" id="audio-capture-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">Audio Capture Module</h1>
+                <p class="detail-subtitle">Real-Time Streaming & Intelligent Buffering System</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The Audio Capture Module represents the critical bridge between raw audio input and intelligent processing, implementing sophisticated streaming algorithms and adaptive buffering strategies. This system continuously captures and processes audio streams with zero data loss, employing multi-layered buffering techniques that accommodate varying network conditions and processing loads while maintaining pristine audio quality.</p>
+                    
+                    <p>Built on enterprise-grade streaming architecture, the module handles massive data throughput with intelligent compression and error correction. It features adaptive bitrate streaming, automatic quality adjustment, and seamless failover mechanisms that ensure uninterrupted audio capture even during network fluctuations or hardware stress conditions.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Zero-Loss Streaming:</strong> Proprietary buffering algorithms ensure 100% audio data integrity with no dropouts or artifacts during capture.</li>
+                        <li><strong>Adaptive Quality Control:</strong> Automatically adjusts streaming parameters based on network conditions and processing capacity to maintain optimal performance.</li>
+                        <li><strong>Multi-Format Support:</strong> Simultaneously captures in multiple audio formats and resolutions for different downstream processing requirements.</li>
+                        <li><strong>Intelligent Buffering:</strong> Dynamic buffer management prevents underruns while minimizing latency through predictive algorithms.</li>
+                        <li><strong>Network Resilience:</strong> Advanced error correction and automatic retry mechanisms maintain streaming continuity during network interruptions.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Streaming Protocols:</strong> RTP/RTSP, WebRTC, HLS, MPEG-DASH</li>
+                            <li><strong>Buffer Capacity:</strong> Up to 10 seconds adaptive buffering</li>
+                            <li><strong>Throughput:</strong> 10 Gbps aggregate streaming capacity</li>
+                            <li><strong>Compression:</strong> Lossless and lossy codecs (FLAC, AAC, Opus)</li>
+                            <li><strong>Network Latency:</strong> &lt; 50ms over Ethernet</li>
+                            <li><strong>Redundancy:</strong> Dual-path streaming with automatic failover</li>
+                            <li><strong>Storage:</strong> SSD cache for critical audio segments</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module is essential for live streaming applications, remote collaboration scenarios, and distributed audio systems where reliable capture and transmission are paramount. It excels in broadcast environments, live event streaming, remote recording sessions, and multi-location audio conferences where network conditions may vary.</p>
+                    
+                    <p>The system's robust streaming capabilities make it particularly valuable for houses of worship broadcasting services, educational institutions conducting remote learning, and entertainment venues offering hybrid live/streaming experiences to global audiences.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Analyzer Detail Page -->
+    <div class="page" id="audio-analyzer-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">Audio Analyzer Module</h1>
+                <p class="detail-subtitle">Advanced Spectral Analysis & Feature Extraction Engine</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The Audio Analyzer Module employs cutting-edge digital signal processing algorithms to perform real-time spectral analysis and comprehensive feature extraction from audio streams. This sophisticated system processes audio content across multiple dimensions, analyzing frequency content, temporal characteristics, spatial distribution, and psychoacoustic properties to generate detailed audio fingerprints that drive intelligent optimization decisions.</p>
+                    
+                    <p>Utilizing advanced machine learning models and traditional signal processing techniques, the analyzer extracts over 2,048 unique audio features per analysis window. These features encompass spectral envelope characteristics, harmonic content analysis, temporal dynamics, spatial coherence metrics, and perceptual quality indicators that provide complete understanding of the audio content's characteristics and quality state.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Comprehensive Analysis:</strong> Extracts 2,048+ audio features including spectral, temporal, and spatial characteristics for complete audio understanding.</li>
+                        <li><strong>Real-Time Processing:</strong> Performs complex analysis operations in under 10ms, enabling immediate feedback for live optimization decisions.</li>
+                        <li><strong>Multi-Domain Analysis:</strong> Simultaneous frequency, time, and spatial domain analysis provides holistic view of audio characteristics.</li>
+                        <li><strong>Adaptive Windowing:</strong> Dynamically adjusts analysis windows based on content type for optimal feature extraction accuracy.</li>
+                        <li><strong>Perceptual Modeling:</strong> Incorporates human auditory perception models to prioritize analysis of perceptually significant audio components.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Analysis Features:</strong> 2,048+ extracted parameters per window</li>
+                            <li><strong>Processing Latency:</strong> &lt; 10ms real-time analysis</li>
+                            <li><strong>Frequency Resolution:</strong> 0.1 Hz precision up to 96 kHz</li>
+                            <li><strong>Dynamic Range:</strong> 144 dB analysis range</li>
+                            <li><strong>Analysis Rate:</strong> Up to 1000 Hz update frequency</li>
+                            <li><strong>Feature Types:</strong> Spectral, temporal, spatial, perceptual</li>
+                            <li><strong>Accuracy:</strong> 99.7% feature classification accuracy</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module provides essential analysis capabilities for professional audio environments requiring detailed understanding of audio characteristics. It's particularly valuable in mastering studios, broadcast facilities, live sound reinforcement systems, and acoustic research applications where precise audio analysis drives critical decisions.</p>
+                    
+                    <p>The system excels in applications requiring automatic audio classification, quality monitoring, feedback detection, and content-aware processing. Its comprehensive analysis capabilities support advanced applications like automatic mixing, intelligent effects processing, and predictive audio optimization.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quality Scoring Detail Page -->
+    <div class="page" id="quality-scoring-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">Quality Scoring Module</h1>
+                <p class="detail-subtitle">AI-Powered Audio Quality Assessment System</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The Quality Scoring Module represents a breakthrough in automated audio quality assessment, employing deep learning neural networks trained on extensive datasets of professionally evaluated audio content. This system provides objective, consistent quality measurements that correlate strongly with human perception, achieving 94.8% correlation with expert audio engineer assessments across diverse audio content types and quality conditions.</p>
+                    
+                    <p>The module evaluates multiple quality dimensions simultaneously, including technical accuracy, perceptual clarity, spatial coherence, and artistic balance. By processing the comprehensive feature set from the Audio Analyzer Module, it generates nuanced quality scores that account for content type, venue acoustics, and listener preferences, providing actionable feedback for real-time optimization decisions.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Human-Level Accuracy:</strong> 94.8% correlation with professional audio engineer quality assessments across all content types.</li>
+                        <li><strong>Multi-Dimensional Scoring:</strong> Evaluates technical quality, perceptual clarity, spatial accuracy, and artistic balance independently and holistically.</li>
+                        <li><strong>Content-Aware Analysis:</strong> Adapts quality criteria based on audio content type (speech, music, ambient) for contextually appropriate assessment.</li>
+                        <li><strong>Predictive Capability:</strong> Anticipates quality degradation before it becomes perceptible, enabling proactive optimization interventions.</li>
+                        <li><strong>Continuous Learning:</strong> Updates quality models based on user feedback and performance outcomes to improve accuracy over time.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Quality Correlation:</strong> 94.8% alignment with expert assessments</li>
+                            <li><strong>Assessment Speed:</strong> &lt; 5ms per quality evaluation cycle</li>
+                            <li><strong>Quality Dimensions:</strong> 12 independent quality metrics</li>
+                            <li><strong>Score Resolution:</strong> 0.1% precision in quality scoring</li>
+                            <li><strong>Content Types:</strong> Speech, music, ambient, mixed content</li>
+                            <li><strong>Training Dataset:</strong> 10M+ professionally assessed audio samples</li>
+                            <li><strong>Update Frequency:</strong> Real-time continuous assessment</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module provides critical quality assurance for professional audio applications where consistent, high-quality output is essential. It's particularly valuable in broadcast environments, live streaming platforms, recording studios, and live sound systems where quality variations can significantly impact audience experience and professional reputation.</p>
+                    
+                    <p>The system excels in automated quality control scenarios, providing immediate feedback for audio operators and driving automatic optimization systems. Its consistent, objective assessments make it ideal for applications requiring quality monitoring across multiple venues, events, or content streams simultaneously.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Optimizer Detail Page -->
+    <div class="page" id="ai-optimizer-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">AI Optimizer Module</h1>
+                <p class="detail-subtitle">Bayesian Parameter Optimization Engine</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The AI Optimizer Module represents the intelligent core of the optimization pipeline, implementing sophisticated Bayesian optimization algorithms that learn optimal parameter configurations through iterative experimentation and performance feedback. This advanced system manages the complex multi-dimensional parameter space of professional audio equipment, discovering optimal settings that maximize audio quality while considering venue acoustics, content characteristics, and listener preferences.</p>
+                    
+                    <p>Utilizing Gaussian process models and acquisition functions, the optimizer efficiently explores parameter combinations to find global optima while avoiding local minima that traditional optimization approaches often encounter. The system maintains probabilistic models of parameter performance relationships, enabling intelligent decision-making that balances exploration of new parameter configurations with exploitation of known high-performing settings.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Intelligent Exploration:</strong> Bayesian algorithms efficiently discover optimal parameter combinations with minimal trial-and-error iterations.</li>
+                        <li><strong>Global Optimization:</strong> Avoids local minima to find true optimal solutions across complex, multi-dimensional parameter spaces.</li>
+
+                        <li><strong>Global Optimization:</strong> Avoids local minima to find true optimal solutions across complex, multi-dimensional parameter spaces.</li>
+                        <li><strong>Adaptive Learning:</strong> Continuously improves optimization strategies based on historical performance data and changing acoustic conditions.</li>
+                        <li><strong>Multi-Objective Optimization:</strong> Simultaneously optimizes multiple conflicting objectives such as clarity, loudness, and spectral balance.</li>
+                        <li><strong>Uncertainty Quantification:</strong> Provides confidence intervals for optimization decisions, enabling risk-aware parameter adjustments.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Optimization Algorithm:</strong> Gaussian Process Bayesian Optimization</li>
+                            <li><strong>Parameter Space:</strong> 128-dimensional continuous/discrete hybrid</li>
+                            <li><strong>Convergence Time:</strong> &lt; 2 minutes to near-optimal solution</li>
+                            <li><strong>Optimization Accuracy:</strong> 98.3% success rate finding global optima</li>
+                            <li><strong>Learning Rate:</strong> Adaptive with exploration/exploitation balance</li>
+                            <li><strong>Memory Usage:</strong> 2GB for complete parameter history</li>
+                            <li><strong>Update Frequency:</strong> 10Hz optimization cycle rate</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module provides intelligent optimization for complex audio systems where manual parameter tuning is time-consuming and suboptimal. It excels in large venue installations, broadcast facilities, and recording studios where optimal settings vary based on content, acoustics, and environmental conditions.</p>
+                    
+                    <p>The system is particularly valuable for applications requiring consistent optimization across different events, content types, and acoustic conditions. Its learning capabilities make it ideal for venues with regular programming where optimization strategies can be refined over time.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-time Engine Detail Page -->
+    <div class="page" id="realtime-engine-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">Real-time Engine Module</h1>
+                <p class="detail-subtitle">Live Optimization Orchestration System</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The Real-time Engine Module serves as the central orchestration system that coordinates all optimization activities across the entire audio pipeline. This mission-critical component manages the complex timing relationships between analysis, optimization, and parameter application, ensuring that all system components work in perfect synchronization to deliver seamless audio enhancement without perceptible delays or artifacts.</p>
+                    
+                    <p>Built on a high-performance, multi-threaded architecture, the engine employs advanced scheduling algorithms and priority management systems to handle multiple concurrent optimization processes while maintaining strict real-time deadlines. The system features intelligent load balancing, predictive resource allocation, and graceful degradation capabilities that ensure continuous operation even under extreme processing loads.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Microsecond Precision:</strong> Maintains synchronization across all pipeline components with sub-millisecond timing accuracy for seamless operation.</li>
+                        <li><strong>Intelligent Load Balancing:</strong> Dynamically distributes processing tasks across available resources to maximize throughput while meeting real-time constraints.</li>
+                        <li><strong>Fault-Tolerant Operation:</strong> Continues optimization even during component failures through redundancy and graceful degradation mechanisms.</li>
+                        <li><strong>Predictive Scheduling:</strong> Anticipates processing requirements and pre-allocates resources to prevent timing violations and ensure smooth operation.</li>
+                        <li><strong>Scalable Architecture:</strong> Seamlessly scales from single-channel to massive multi-channel installations without performance degradation.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Processing Cores:</strong> Up to 64-core parallel processing</li>
+                            <li><strong>Timing Accuracy:</strong> ±0.1ms synchronization precision</li>
+                            <li><strong>Throughput:</strong> 10,000+ parameter updates per second</li>
+                            <li><strong>Latency:</strong> &lt; 1ms end-to-end optimization latency</li>
+                            <li><strong>Reliability:</strong> 99.999% uptime with automatic recovery</li>
+                            <li><strong>Memory Management:</strong> Zero-copy algorithms for minimal latency</li>
+                            <li><strong>Load Handling:</strong> Up to 95% CPU utilization with stability</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module is essential for any real-time audio optimization system where timing precision and system coordination are critical. It excels in live performance environments, broadcast studios, and installed sound systems where even minor timing errors can cause audible artifacts or system instability.</p>
+                    
+                    <p>The engine is particularly valuable in complex installations with multiple optimization algorithms running simultaneously, ensuring that all processes work together harmoniously without conflicts or resource contention that could degrade audio quality or system performance.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LV1 Console Detail Page -->
+    <div class="page" id="lv1-console-page">
+        <div class="detail-page">
+            <div class="detail-header">
+                <h1 class="detail-title">LV1 Console Integration</h1>
+                <p class="detail-subtitle">Professional Console Control Interface</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-section">
+                    <h3>Overview</h3>
+                    <p>The LV1 Console Integration Module provides seamless bidirectional communication with Waves LV1 live mixing systems, enabling direct control and monitoring of professional audio console parameters through the optimization pipeline. This sophisticated interface translates optimization decisions into precise console commands while respecting the operational workflow and safety constraints of live audio environments.</p>
+                    
+                    <p>Designed in partnership with professional audio engineers, this module maintains the familiar LV1 console experience while adding intelligent automation capabilities. The system provides both automatic parameter adjustment and manual override options, ensuring that audio engineers retain complete creative control while benefiting from AI-driven optimization suggestions and real-time performance enhancements.</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Key Benefits</h3>
+                    <ul class="benefits-list">
+                        <li><strong>Native LV1 Integration:</strong> Direct API communication with LV1 consoles for seamless parameter control and real-time status monitoring.</li>
+                        <li><strong>Engineer-Friendly Design:</strong> Maintains familiar console workflow while adding intelligent automation that enhances rather than replaces human expertise.</li>
+                        <li><strong>Safety-First Approach:</strong> Implements multiple safeguards and manual overrides to prevent unwanted changes during critical live performance moments.</li>
+                        <li><strong>Intelligent Suggestions:</strong> Provides real-time optimization recommendations that engineers can accept, modify, or reject based on artistic vision.</li>
+                        <li><strong>Performance Analytics:</strong> Tracks console usage patterns and optimization effectiveness to improve future recommendations and system performance.</li>
+                    </ul>
+                </div>
+
+                <div class="detail-section">
+                    <div class="tech-specs">
+                        <h4>Technical Specifications</h4>
+                        <ul>
+                            <li><strong>Console Models:</strong> Full LV1 product line compatibility</li>
+                            <li><strong>Parameters Controlled:</strong> 500+ individual console parameters</li>
+                            <li><strong>Communication Protocol:</strong> Waves SoundGrid native protocol</li>
+                            <li><strong>Update Rate:</strong> 100Hz bidirectional communication</li>
+                            <li><strong>Latency:</strong> &lt; 5ms console command execution</li>
+                            <li><strong>Safety Features:</strong> 3-level override protection system</li>
+                            <li><strong>Network Requirement:</strong> Gigabit Ethernet recommended</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Intended Use Cases</h3>
+                    <p>This module transforms LV1 console installations into intelligent, adaptive mixing environments perfect for houses of worship, live venues, and touring productions. It excels in applications where consistent, high-quality mixing is required across multiple events while maintaining the creative flexibility that professional audio engineers demand.</p>
+                    
+                    <p>The system is particularly valuable for venues with less experienced operators, providing intelligent guidance and automatic optimization while preserving manual control for critical artistic decisions. Its learning capabilities adapt to individual engineer preferences and venue characteristics over time.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Page navigation system
+        let currentPage = 0;
+        const pages = ['main-page', 'audio-input-page', 'audio-capture-page', 'audio-analyzer-page', 'quality-scoring-page', 'ai-optimizer-page', 'realtime-engine-page', 'lv1-console-page'];
+        const pageNames = ['Overview', 'Audio Input', 'Audio Capture', 'Audio Analyzer', 'Quality Scoring', 'AI Optimizer', 'Real-time Engine', 'LV1 Console'];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateNavigation();
+            updatePageIndicator();
+            
+            // Show modules after a delay
+            setTimeout(() => {
+                const pipelineContainer = document.getElementById('pipeline-container');
+                if (pipelineContainer) {
+                    pipelineContainer.classList.add('modules-visible');
+                }
+            }, 1000);
+
+            // Start animations and statistics
+            startAnimations();
+        });
+
+        // Navigation functions
+        function showPage(pageIndex) {
+            if (pageIndex < 0 || pageIndex >= pages.length) return;
+            
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // Show target page
+            document.getElementById(pages[pageIndex]).classList.add('active');
+            currentPage = pageIndex;
+            
+            updateNavigation();
+            updatePageIndicator();
+        }
+
+        function nextPage() {
+            if (currentPage < pages.length - 1) {
+                showPage(currentPage + 1);
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                showPage(currentPage - 1);
+            }
+        }
+
+        function updateNavigation() {
+            const prevArrow = document.getElementById('prev-arrow');
+            const nextArrow = document.getElementById('next-arrow');
+            
+            prevArrow.classList.toggle('disabled', currentPage === 0);
+            nextArrow.classList.toggle('disabled', currentPage === pages.length - 1);
+        }
+
+        function updatePageIndicator() {
+            const indicator = document.getElementById('page-indicator');
+            indicator.textContent = `${currentPage + 1}/${pages.length} - ${pageNames[currentPage]}`;
+        }
+
+        // Event listeners
+        document.getElementById('next-arrow').addEventListener('click', nextPage);
+        document.getElementById('prev-arrow').addEventListener('click', prevPage);
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight') nextPage();
+            if (e.key === 'ArrowLeft') prevPage();
+        });
+
+        // Module click handlers
+        document.getElementById('audio-input').addEventListener('click', () => showPage(1));
+        document.getElementById('audio-capture').addEventListener('click', () => showPage(2));
+        document.getElementById('audio-analyzer').addEventListener('click', () => showPage(3));
+        document.getElementById('quality-scoring').addEventListener('click', () => showPage(4));
+        document.getElementById('bayesian-optimizer').addEventListener('click', () => showPage(5));
+        document.getElementById('realtime-optimizer').addEventListener('click', () => showPage(6));
+        document.getElementById('lv1-integration').addEventListener('click', () => showPage(7));
+
+        // Speaker click handler
+        document.getElementById('speaker').addEventListener('click', function() {
+            const pipelineContainer = document.getElementById('pipeline-container');
+            pipelineContainer.classList.toggle('modules-visible');
+        });
+
+        // Animation and statistics system
+        function startAnimations() {
+            // Update statistics periodically
+            setInterval(updateStats, 2000);
+            
+            // Module processing animation cycle
+            setInterval(cycleProcessing, 3000);
+            
+            // Update activity text
+            setInterval(updateActivity, 4000);
+        }
+
+        function updateStats() {
+            const stats = {
+                latency: () => (Math.random() * 2 + 1.5).toFixed(1) + 'ms',
+                cycles: () => Math.floor(Math.random() * 50 + 120),
+                quality: () => (Math.random() * 8 + 90).toFixed(1) + '%',
+                parameters: () => Math.floor(Math.random() * 10 + 20),
+                efficiency: () => Math.floor(Math.random() * 100 + 250) + '%',
+                console: () => Math.random() > 0.1 ? '🟢 Connected' : '🟡 Optimizing'
+            };
+
+            Object.keys(stats).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    element.textContent = stats[key]();
+                }
+            });
+        }
+
+        function cycleProcessing() {
+            const modules = document.querySelectorAll('.module');
+            const randomModule = modules[Math.floor(Math.random() * modules.length)];
+            
+            randomModule.classList.add('processing');
+            setTimeout(() => {
+                randomModule.classList.remove('processing');
+            }, 1200);
+        }
+
+        function updateActivity() {
+            const activities = [
+                ' Analyzing frequency response patterns...',
+                ' Optimizing equalizer parameters...',
+                ' Processing spectral analysis data...',
+                ' Applying real-time optimizations...',
+                ' Synchronizing with LV1 console...',
+                ' Training adaptive algorithms...',
+                ' Measuring quality improvements...',
+                ' Updating optimization models...'
+            ];
+            
+            const activityText = document.getElementById('activity-text');
+            if (activityText) {
+                const randomActivity = activities[Math.floor(Math.random() * activities.length)];
+                activityText.textContent = randomActivity;
+            }
+        }
+
+        // Tooltip system
+        document.querySelectorAll('.module').forEach(module => {
+            module.addEventListener('mouseenter', function() {
+                const title = this.querySelector('.module-title').textContent;
+                const description = this.querySelector('.module-description').textContent;
+                
+                // Create tooltip
+                const tooltip = document.createElement('div');
+                tooltip.className = 'module-tooltip';
+                tooltip.innerHTML = `
+                    <div style="background: rgba(30, 41, 59, 0.95); color: #e2e8f0; padding: 10px 15px; border-radius: 8px; font-size: 0.9em; backdrop-filter: blur(10px); border: 1px solid #475569; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);">
+                        <strong>${title}</strong><br>
+                        ${description}<br>
+                        <em style="color: #10b981; font-size: 0.8em;">Click for detailed specifications →</em>
+                    </div>
+                `;
+                tooltip.style.position = 'fixed';
+                tooltip.style.zIndex = '1000';
+                tooltip.style.pointerEvents = 'none';
+                
+                document.body.appendChild(tooltip);
+                
+                // Position tooltip
+                const rect = this.getBoundingClientRect();
+                tooltip.style.left = (rect.left + rect.width / 2 - 100) + 'px';
+                tooltip.style.top = (rect.top - 80) + 'px';
+            });
+            
+            module.addEventListener('mouseleave', function() {
+                const tooltips = document.querySelectorAll('.module-tooltip');
+                tooltips.forEach(tooltip => tooltip.remove());
+            });
+        });
+    </script>
+</body>
+</html>
