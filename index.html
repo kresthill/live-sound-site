@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sound Optimization Pipeline</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: #e2e8f0;
+            position: relative;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #f1f1f4, #f6f6f7, #eef0f1);
+        }
+
+        /* Background Image */
+        .background-image {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.15;
+            display: flex;
+            background: radial-gradient(circle at 30% 50%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 30%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 50% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
+        }
+
+        /* Page System */
+        .page {
+            display: none;
+            min-height: 100vh;
+            position: relative;
+            z-index: 2;
+            padding: 20px;
+        }
+
+        .page.active {
+            display: block;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Page Indicator */
+        .page-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid #10b981;
+            border-radius: 15px;
+            padding: 10px 20px;
+            color: #10b981;
+            font-weight: 600;
+            z-index: 200;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Navigation arrows */
+        .nav-arrows {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 200;
+        }
+
+        .nav-arrow {
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid #10b981;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-arrow:hover {
+            background: rgba(16, 185, 129, 0.2);
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(2, 247, 169, 0.244);
+        }
+
+        .nav-arrow.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            border-color: #64748b;
+        }
+
+        .nav-arrow.disabled:hover {
+            transform: none;
+            background: rgba(30, 41, 59, 0.9);
+            box-shadow: none;
+        }
+
+        .nav-arrow svg {
+            width: 24px;
+            height: 24px;
+            fill: #10b981;
+        }
+
+        .nav-arrow.disabled svg {
+            fill: #64748b;
+        }
+
+        /* Main Pipeline Styles */
+        .pipeline-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            padding: 20px;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            z-index: 100;
+            position: relative;
+        }
+
+        .main-title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #090008, #764ba2, #f093fb);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(248, 244, 248, 0.5);
+            animation: gradientFlow 6s ease-in-out infinite;
+            z-index: 200;
+            
+            
+            /* Box styling - tight fit */
+            padding: 10px 20px;
+            position: relative;
+            text-align: center;
+            display: inline-block;
+            line-height: 1.1;
+            
+        }
+
+        /* Create the box background separate from text gradient */
+        .main-title::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(87, 11, 85, 0.801);
+            backdrop-filter: blur(15px);
+            border: 2px solid #5d605f;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        .title {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #022224, #4ba293, #046557);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(67, 63, 67, 0.5);
+            /*animation: gradientFlow 6s ease-in-out infinite;*/
+        }
+
+        @keyframes gradientFlow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #720f749e;
+            opacity: 0.9;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Central speaker container */
+        .speaker-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 420px;
+            height: 420px;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            display: flex;
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .speaker-container::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: conic-gradient(from 0deg, #10b981, #3b82f6, #f59e0b, #ef4444, #8b5cf6, #ec4899, #10b981);
+            border-radius: 50%;
+            animation: speakerRotate 8s linear infinite;
+            z-index: -1;
+        }
+
+        .speaker-container .speaker-svg {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #1e293b 20%, #334155 40%, #475569 60%, #64748b 80%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .speaker-container .speaker-svg::before {
+            content: '';
+            position: absolute;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, #7e0949 30%, #1e293b 70%);
+            border-radius: 50%;
+            border: 3px solid #22010331;
+            animation: speakerPulse 3s ease-in-out infinite;
+            opacity: 0.5;
+        }
+
+        .speaker-container .speaker-svg::after {
+            content: '🔊';
+            position: absolute;
+            font-size: 4em;
+            color: #10b981;
+            text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+            animation: iconGlow 2s ease-in-out infinite alternate;
+        }
+
+        /* Hide speaker completely for non-main pages */
+        .page:not(#main-page).active ~ .speaker-container {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        @keyframes speakerPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(16, 185, 129, 0.6); }
+        }
+
+        @keyframes speakerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes iconGlow {
+            0% { text-shadow: 0 0 20px rgba(16, 185, 129, 0.5); }
+            100% { text-shadow: 0 0 30px rgba(16, 185, 129, 0.8), 0 0 40px rgba(16, 185, 129, 0.4); }
+        }
+
+        /* Mobile speaker sizing */
+        @media (max-width: 768px) {
+            .speaker-container {
+                width: 120px;
+                height: 120px;
+                top: 35%;
+            }
+            
+            .speaker-container .speaker-svg::after {
+                font-size: 2.5em;
+            }
+        }
+
+        /* Pipeline container for modules */
+        .pipeline {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+        }
+
+        /* Module styles - positioned vertically to the right of speaker */
+        .module {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: absolute;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            z-index: 250;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.8) translateY(-20px);
+            left: calc(50% + 280px); 
+            width: 140px;
+           /* background: rgba(30, 41, 59, 0.95);*/
+            background: rgba(12, 53, 51, 0.502);
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(8px);
+            border: 3px solid rgba(243, 245, 244, 0.3);
+
+        }
+
+
+         /* Module Colors for icons */
+        .audio-input .sound-wave-icon { color: #e7e1e6; }
+        .audio-capture .satellite-dish-icon { color: #e7e1e6; }
+        .audio-analyzer .bar-graph-icon { color: #e7e1e6; }
+        .quality-scoring .star-rating-icon { ccolor: #e7e1e6; }
+        .bayesian-optimizer .brain-icon { color: #e7e1e6; }
+        .realtime-optimizer .gear-system-icon {color: #e7e1e6; }
+        .lv1-integration .module-icon { color: #e7e1e6; }
+
+        /* Show modules when active */
+        .modules-visible .module {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1) translateY(0);
+        }
+
+        /* Hover effects for modules */
+        .module:hover {
+            transform: scale(1.05) translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
+            border-color: #10b981;
+        }
+
+        /* Vertical positioning of modules to the right of speaker */
+        .module:nth-child(1) { top: 8%; transition-delay: 0.1s; }
+        .module:nth-child(2) { top: 18%; transition-delay: 0.2s; }
+        .module:nth-child(3) { top: 28%; transition-delay: 0.3s; }
+        .module:nth-child(4) { top: 38%; transition-delay: 0.4s; }
+        .module:nth-child(5) { top: 48%; transition-delay: 0.5s; }
+        .module:nth-child(6) { top: 58%; transition-delay: 0.6s; }
+        .module:nth-child(7) { top: 68%; transition-delay: 0.7s; }
+
+        @media (max-width: 768px) {
+            .module {
+                left: calc(50% + 80px);
+                width: 120px;
+                padding: 12px;
+            }
+            
+            .module:nth-child(1) { top: 8%; }
+            .module:nth-child(2) { top: 16%; }
+            .module:nth-child(3) { top: 24%; }
+            .module:nth-child(4) { top: 40%; }
+            .module:nth-child(5) { top: 48%; }
+            .module:nth-child(6) { top: 56%; }
+            .module:nth-child(7) { top: 64%; }
+            
+            .title {
+                font-size: 1.5em;
+                line-height: 1.2;
+            }
+            
+            .subtitle {
+                font-size: 0.9em;
+            }
+            
+            .header {
+                margin-bottom: 15px;
+            }
+            
+            .page-indicator {
+                top: 10px;
+                left: 10px;
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+        }
+
+        .module-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        .mixer {
+            width: 500px;
+            border-radius: 25px;
+        }
+
+        @media (max-width: 768px) {
+            .module-icon {
+                font-size: 2em;
+                margin-bottom: 8px;
+            }
+        }
+
+        /* Sound Wave Icon */
+        .sound-wave-icon {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        .sound-wave-bar {
+            width: 5px;
+            background-color: currentColor;
+            border-radius: 3px;
+            animation: soundWave 1.5s ease-in-out infinite;
+        }
+
+        .sound-wave-bar:nth-child(1) { height: 35px; animation-delay: 0s; }
+        .sound-wave-bar:nth-child(2) { height: 20px; animation-delay: 0.1s; }
+        .sound-wave-bar:nth-child(3) { height: 45px; animation-delay: 0.2s; }
+        .sound-wave-bar:nth-child(4) { height: 25px; animation-delay: 0.3s; }
+        .sound-wave-bar:nth-child(5) { height: 15px; animation-delay: 0.4s; }
+        .sound-wave-bar:nth-child(6) { height: 30px; animation-delay: 0.5s; }
+        .sound-wave-bar:nth-child(7) { height: 40px; animation-delay: 0.6s; }
+
+        @keyframes soundWave {
+            0%, 100% { transform: scaleY(1); opacity: 0.7; }
+            50% { transform: scaleY(1.3); opacity: 1; }
+        }
+
+        .module-title {
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 0;
+            margin-top: 8px;
+            color: #e8ebf0;
+            text-shadow: none;
+        }
+
+        .module-description {
+            font-size: 0.8em;
+            color: #edda07;
+            line-height: 1.3;
+            text-shadow: none;
+            margin-top: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .module-title {
+                font-size: 0.9em;
+                margin-top: 6px;
+            }
+            
+            .module-description {
+                font-size: 0.75em;
+                line-height: 1.4;
+            }
+        }
+
+        /* Satellite Dish Icon */
+        .satellite-dish-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .dish {
+            width: 35px;
+            height: 35px;
+            border: 3px solid currentColor;
+            border-radius: 50%;
+            border-right-color: transparent;
+            border-bottom-color: transparent;
+            position: relative;
+            animation: dishRotate 2s ease-in-out infinite;
+        }
+
+        .dish-pole {
+            width: 2px;
+            height: 12px;
+            background-color: currentColor;
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .dish-base {
+            width: 10px;
+            height: 3px;
+            background-color: currentColor;
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+
+        .signal-wave {
+            position: absolute;
+            border: 1px solid currentColor;
+            border-radius: 50%;
+            animation: signalPulse 2s ease-in-out infinite;
+        }
+
+        .signal-wave:nth-child(1) {
+            width: 40px;
+            height: 40px;
+            top: 5px;
+            left: 5px;
+            animation-delay: 0s;
+        }
+
+        .signal-wave:nth-child(2) {
+            width: 50px;
+            height: 50px;
+            top: 0px;
+            left: 0px;
+            animation-delay: 0.3s;
+        }
+
+        .signal-wave:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            top: -5px;
+            left: -5px;
+            animation-delay: 0.6s;
+        }
+
+        @keyframes dishRotate {
+            0%, 100% { transform: rotate(-45deg); }
+            50% { transform: rotate(-35deg); }
+        }
+
+        @keyframes signalPulse {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 0.6; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.2); }
+        }
+
+        /* Bar Graph Icon */
+        .bar-graph-icon {
+            display: inline-flex;
+            align-items: flex-end;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .chart-bar {
+            width: 5px;
+            background-color: currentColor;
+            border-radius: 2px 2px 0 0;
+            margin: 0 1px;
+            position: relative;
+            animation: dataAnalysis 4s linear infinite;
+        }
+
+        .chart-bar:nth-child(1) { height: 12px; animation-delay: 0s; }
+        .chart-bar:nth-child(2) { height: 20px; animation-delay: 0.8s; }
+        .chart-bar:nth-child(3) { height: 28px; animation-delay: 1.6s; }
+        .chart-bar:nth-child(4) { height: 35px; animation-delay: 2.4s; }
+        .chart-bar:nth-child(5) { height: 30px; animation-delay: 3.2s; }
+
+        @keyframes dataAnalysis {
+            0% { opacity: 0.4; transform: scaleY(0.8); }
+            25% { opacity: 1; transform: scaleY(1.1); box-shadow: 0 0 8px currentColor; }
+            50% { opacity: 0.7; transform: scaleY(1); }
+            75% { opacity: 0.9; transform: scaleY(1.05); }
+            100% { opacity: 0.4; transform: scaleY(0.8); }
+        }
+
+        /* Star Rating Icon */
+        .star-rating-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            width: 80px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .star {
+            width: 15px;
+            height: 15px;
+            position: relative;
+            opacity: 0;
+            transform: scale(0);
+            animation: starAppear 5s ease-in-out infinite;
+        }
+
+        .star::before {
+            content: '★';
+            color: #fbbf24;
+            font-size: 15px;
+            position: absolute;
+            top: -3px;
+            left: -1px;
+        }
+
+        .star:nth-child(1) { animation-delay: 0s; }
+        .star:nth-child(2) { animation-delay: 0.4s; }
+        .star:nth-child(3) { animation-delay: 0.8s; }
+        .star:nth-child(4) { animation-delay: 1.2s; }
+        .star:nth-child(5) { animation-delay: 1.6s; }
+
+        @keyframes starAppear {
+            0%, 20% { opacity: 0; transform: scale(0) rotate(0deg); }
+            25% { opacity: 1; transform: scale(1.3) rotate(72deg); }
+            30% { opacity: 1; transform: scale(1) rotate(0deg); }
+            90% { opacity: 1; transform: scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        }
+
+        /* Brain Icon */
+        .brain-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .brain-left, .brain-right {
+            width: 20px;
+            height: 35px;
+            border: 2px solid currentColor;
+            border-radius: 10px 3px 6px 10px;
+            position: relative;
+            background: transparent;
+            animation: brainPulse 3s ease-in-out infinite;
+        }
+
+        .brain-right {
+            border-radius: 3px 10px 10px 6px;
+            margin-left: 2px;
+            animation-delay: 0.3s;
+        }
+
+        @keyframes brainPulse {
+            0%, 100% { border-color: currentColor; opacity: 0.7; }
+            50% { border-color: #ebf0ef; opacity: 1; filter: drop-shadow(0 0 8px rgba(174, 176, 175, 0.5)); }
+        }
+
+        /* Gear System Icon */
+        .gear-system-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .gear-large {
+            width: 30px;
+            height: 30px;
+            border: 3px solid currentColor;
+            border-radius: 50%;
+            position: absolute;
+            animation: gearRotate 4s linear infinite;
+        }
+
+        .gear-large::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            right: -6px;
+            bottom: -6px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            clip-path: polygon(
+                50% 0%, 60% 10%, 90% 10%, 90% 40%, 60% 40%, 50% 50%,
+                40% 40%, 10% 40%, 10% 10%, 40% 10%
+            );
+        }
+
+        .gear-small {
+            width: 18px;
+            height: 18px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            position: absolute;
+            top: 20px;
+            right: 5px;
+            animation: gearRotate 3s linear infinite reverse;
+        }
+
+        @keyframes gearRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Statistics Panel 
+        .stats-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(15px);
+            border: 2px solid #475569;
+            border-radius: 15px;
+            padding: 20px;
+            width: 280px;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .stats-panel {
+                position: relative;
+                width: calc(100% - 40px);
+                margin: 20px auto 0;
+                top: auto;
+                right: auto;
+                order: -1;
+            }
+
+            .pipeline-container {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .pipeline {
+                order: 1;
+            }
+        }
+
+        .stats-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #10b981;
+            text-align: center;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 6px 0;
+            border-bottom: 1px solid #334155;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #cbd5e1;
+            font-size: 0.8em;
+        }
+
+        .stat-value {
+            color: #10b981;
+            font-weight: 600;
+            font-size: 0.8em;
+        }*/
+
+        .activity-indicator {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(16, 185, 129, 0.2)); 
+            backdrop-filter: blur(15px);
+            border: 1px solid #475569;
+            border-radius: 20px;
+            padding: 12px 25px;
+            font-size: 0.9em;
+            color: #e2e8f0;
+            z-index: 100;
+            min-width: 250px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        @media (max-width: 768px) {
+            .activity-indicator {
+                position: relative;
+                bottom: auto;
+                left: auto;
+                transform: none;
+                margin: 20px auto;
+                min-width: auto;
+                width: calc(100% - 40px);
+                font-size: 0.85em;
+                padding: 15px 20px;
+            }
+        }
+
+        /* Processing animation */
+        .module.processing {
+            animation: processingGlow 1.2s ease-in-out;
+        }
+
+        .module.processing .module-icon,
+        .module.processing .sound-wave-icon,
+        .module.processing .satellite-dish-icon,
+        .module.processing .bar-graph-icon,
+        .module.processing .star-rating-icon,
+        .module.processing .brain-icon,
+        .module.processing .gear-system-icon {
+            filter: drop-shadow(0 0 15px currentColor);
+        }
+
+        @keyframes processingGlow {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.1) translateY(-5px); }
+        }
+
+        .instruction-text {
+            position: fixed;
+            top: calc(50% + 200px);
+            left: 50%;
+            transform: translateX(-50%);
+            color: #e28007;
+            font-size: 1.1em;
+            text-align: center;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+            z-index: 150;
+            font-weight: 500;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .modules-visible .instruction-text {
+            opacity: 0;
+        }
+
+        @media (max-width: 768px) {
+            .instruction-text {
+                top: 55%;
+                font-size: 0.95em;
+                padding: 0 20px;
+            }
+        }
+
+        /* Detail Page Styles */
+        .detail-page {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px 120px;
+            color: #1e293b;
+        }
+
+        .detail-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .detail-title {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientFlow 6s ease-in-out infinite;
+        }
+
+        .detail-subtitle {
+            font-size: 1.3em;
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+
+        .detail-icon {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .detail-content {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+        }
+
+        .detail-section h3 {
+            font-size: 1.4em;
+            color: #1e293b;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .detail-section p {
+            font-size: 1.1em;
+            line-height: 1.7;
+            color: #475569;
+            margin-bottom: 15px;
+        }
+
+        .benefits-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .benefits-list li {
+            background: rgba(16, 185, 129, 0.1);
+            margin: 10px 0;
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-left: 4px solid #10b981;
+            font-size: 1em;
+            color: #1e293b;
+        }
+
+        .tech-specs {
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .tech-specs h4 {
+            color: #3b82f6;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .tech-specs ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .tech-specs li {
+            padding: 5px 0;
+            color: #475569;
+        }
+
+        /* Author Page Styles */
+        .author-page {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px 120px;
+            color: #1e293b;
+        }
+
+        .author-header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .author-name {
+            font-size: 3em;
+            font-weight: 700;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            animation: gradientFlow 6s ease-in-out infinite;
+        }
+
+        .author-title {
+            font-size: 1.4em;
+            color: #64748b;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .author-company {
+            font-size: 1.2em;
+            color: #10b981;
+            font-weight: 500;
+        }
+
+        .certification-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            display: inline-block;
+            margin: 20px auto;
+            font-weight: 600;
+            font-size: 1.1em;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .author-content {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .bio-section {
+            margin-bottom: 35px;
+        }
+
+        .bio-section h3 {
+            font-size: 1.5em;
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bio-section p {
+            font-size: 1.1em;
+            line-height: 1.8;
+            color: #475569;
+            margin-bottom: 20px;
+        }
+
+        .education-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-top: 25px;
+        }
+
+        .education-card {
+            background: rgba(16, 185, 129, 0.05);
+            border: 2px solid #10b981;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .education-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+        }
+
+        .education-card h4 {
+            color: #10b981;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .education-card p {
+            color: #64748b;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .skill-item {
+            background: rgba(59, 130, 246, 0.1);
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-left: 4px solid #3b82f6;
+            font-size: 1em;
+            color: #1e293b;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .author-name {
+                font-size: 2.2em;
+            }
+            
+            .author-title {
+                font-size: 1.2em;
+            }
+            
+            .author-company {
+                font-size: 1.1em;
+            }
+
+            .author-content {
+                padding: 25px;
+            }
+            
+            .education-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .skills-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .central-speaker {
+            width: 500px;
+        }
+
+        .mixer {
+            width: 60px;
+            height: 50px;
+            border-radius: 10px;
+            object-fit: cover;
+            display: block;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Image -->
+    <div class="background-image">
+        <img class="bg-image" src="images/240_F_600237855_zW3KNjTSnjeb7mBA7GPVf1HkM56SRucX.jpg">
+    </div>
+
+    <!-- Page Indicator -->
+    <div class="page-indicator" id="page-indicator">1 / 9</div>
+
+
+    <!-- Main Page -->
+    <div id="main-page" class="page active">
+        <div>
+            <h1 class="main-title">Divinity Design</h1>
+        </div>
+        <div class="pipeline-container">
+            <div class="header">
+                <h1 class="title">Live Sound Optimization Pipeline</h1>
+                <p class="subtitle">AI-Powered Audio Engineering for Perfect Live Performance</p>
+            </div>
+
+            <div class="pipeline">
+                <!-- Audio Input Module -->
+                <div class="module audio-input" onclick="navigateToPage(3)" data-module="audio-input">
+                    <div class="sound-wave-icon">
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                        <div class="sound-wave-bar"></div>
+                    </div>
+                    <div class="module-title">Audio Input</div>
+                    <div class="module-description">Multi-channel capture</div>
+                </div>
+
+                <!-- Audio Capture Module -->
+                <div class="module audio-capture" onclick="navigateToPage(4)" data-module="audio-capture">
+                    <div class="satellite-dish-icon">
+                        <div class="signal-wave"></div>
+                        <div class="signal-wave"></div>
+                        <div class="signal-wave"></div>
+                        <div class="dish">
+                            <div class="dish-pole"></div>
+                            <div class="dish-base"></div>
+                        </div>
+                    </div>
+                    <div class="module-title">Audio Capture</div>
+                    <div class="module-description">High-fidelity sampling</div>
+                </div>
+
+                <!-- Audio Analyzer Module -->
+                <div class="module audio-analyzer" onclick="navigateToPage(5)" data-module="audio-analyzer">
+                    <div class="bar-graph-icon">
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                        <div class="chart-bar"></div>
+                    </div>
+                    <div class="module-title">Audio Analyzer</div>
+                    <div class="module-description">Real-time analysis</div>
+                </div>
+
+                <!-- Quality Scoring Module -->
+                <div class="module quality-scoring" onclick="navigateToPage(6)" data-module="quality-scoring">
+                    <div class="star-rating-icon">
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                        <div class="star"></div>
+                    </div>
+                    <div class="module-title">Quality Scoring</div>
+                    <div class="module-description">AI-based evaluation</div>
+                </div>
+
+                <!-- Bayesian Optimizer Module -->
+                <div class="module bayesian-optimizer" onclick="navigateToPage(7)" data-module="bayesian-optimizer">
+                    <div class="brain-icon">
+                        <div class="brain-left"></div>
+                        <div class="brain-right"></div>
+                    </div>
+                    <div class="module-title">AI Optimizer</div>
+                    <div class="module-description">Bayesian optimization</div>
+                </div>
+
+                <!-- Real-time Optimizer Module -->
+                <div class="module realtime-optimizer" onclick="navigateToPage(8)" data-module="realtime-optimizer">
+                    <div class="gear-system-icon">
+                        <div class="gear-large"></div>
+                        <div class="gear-small"></div>
+                    </div>
+                    <div class="module-title">Real-time Engine</div>
+                    <div class="module-description">Live optimization</div>
+                </div>
+
+                <!-- LV1 Integration Module -->
+                <div class="module lv1-integration" onclick="navigateToPage(9)" data-module="lv1-integration">
+                     <div>
+                        <img class="mixer" src="Images/istockphoto-622064544-612x612.jpg" alt="Mixer">
+                    </div>
+                    <div class="module-title">LV1 Console</div>
+                    <div class="module-description">Hardware integration</div>
+                </div>
+
+                <!-- Instruction Text -->
+                <div class="instruction-text">
+                    Click the speaker to reveal the optimization pipeline
+                </div>
+            </div>
+
+            <!-- Statistics Panel -->
+            <div class="stats-panel">
+                <div class="stats-title">System Performance</div>
+                <div class="stat-item">
+                    <span class="stat-label">Processing Latency</span>
+                    <span class="stat-value" id="latency">2.3ms</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Audio Quality Score</span>
+                    <span class="stat-value" id="quality">94.7%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Optimization Rate</span>
+                    <span class="stat-value" id="optimization">127 Hz</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Active Channels</span>
+                    <span class="stat-value" id="channels">32/64</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">CPU Usage</span>
+                    <span class="stat-value" id="cpu">23%</span>
+                </div>
+            </div>
+
+            <!-- Activity Indicator -->
+            <div class="activity-indicator" id="activity">
+                System Ready - Awaiting Audio Input
+            </div>
+        </div>
+    </div>
+
+    <!-- Author Page -->
+    <div id="author-page" class="page author-page">
+        <div class="author-header">
+            <h1 class="author-name">Divinity Design</h1>
+            <div class="author-title">AI Sound Engineering Optimization System</div>
+            <div class="author-company">Dynamically Optimizing Sound System For Maximum Performance</div>
+            <div class="certification-badge">Desinged to Enhance Sound Quality</div>
+        </div>
+
+        <div class="author-content">
+            <div class="bio-section">
+                <h4></h4>About the Author</h4>
+                <h3>🚀 Professional Journey</h3>
+                <p>As a passionate Data and ML/AI Engineer at Divinity Sound, I specialize in revolutionizing live audio experiences through cutting-edge artificial intelligence and machine learning technologies. My expertise lies at the intersection of audio engineering, data science, and AI optimization.</p>
+                
+                <p>With a deep understanding of both theoretical machine learning concepts and practical audio engineering challenges, I've developed innovative solutions that transform how live sound is captured, analyzed, and optimized in real-time. My work focuses on creating intelligent systems that can adapt and learn from acoustic environments to deliver consistently exceptional audio quality.</p>
+            </div>
+
+            <div class="bio-section">
+                <h3>🎓 Educational Excellence</h3>
+                <div class="education-grid">
+                    <div class="education-card">
+                        <h4>10Alytics</h4>
+                        <p><strong>Advanced Data Science Program</strong></p>
+                        <p>Specialized training in practical ML applications, statistical modeling, and real-world data science implementation</p>
+                    </div>
+                    <div class="education-card">
+                        <h4>Imperial College London</h4>
+                        <p><strong>ML & AI Specialization</strong></p>
+                        <p>Comprehensive theoretical foundations in machine learning algorithms, neural networks, and AI system design</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bio-section">
+                <h3>💡 Core Expertise</h3>
+                <div class="skills-grid">
+                    <div class="skill-item">Machine Learning Algorithms</div>
+                    <div class="skill-item">Bayesian Optimization</div>
+                    <div class="skill-item">Signal Processing</div>
+                    <div class="skill-item">Real-time Audio Analysis</div>
+                    <div class="skill-item">Neural Networks</div>
+                    <div class="skill-item">Data Pipeline Architecture</div>
+                    <div class="skill-item">Audio Engineering</div>
+                    <div class="skill-item">Performance Optimization</div>
+                </div>
+            </div>
+
+            <div class="bio-section">
+                <h3>🎯 Mission Statement</h3>
+                <p>My vision is to democratize professional-grade audio quality through intelligent automation. By leveraging advanced AI techniques, I aim to create systems that can instantly adapt to any acoustic environment, ensuring that every live performance reaches its full sonic potential regardless of venue constraints or operator expertise level.</p>
+                
+                <p>Through the Live Sound Optimization Pipeline, I'm working towards a future where AI-powered audio engineering becomes the standard, making exceptional sound quality accessible to artists and venues worldwide while preserving the artistry and nuance that makes live music truly magical.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Input Detail Page -->
+    <div id="audio-input-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">Audio Input System</h1>
+            <div class="detail-subtitle">Multi-Channel Audio Capture & Processing</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>System Overview</h3>
+                <p>The Audio Input System serves as the foundation of our optimization pipeline, providing high-fidelity, multi-channel audio capture with ultra-low latency. This sophisticated input stage ensures that every nuance of the live performance is captured with pristine quality, setting the stage for intelligent analysis and optimization.</p>
+                
+                <p>Our advanced input architecture supports up to 64 simultaneous channels with 24-bit/96kHz resolution, providing the dynamic range and frequency response necessary for professional live sound applications. The system employs proprietary buffering algorithms to minimize latency while maintaining perfect sample accuracy.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Key Benefits</h3>
+                <ul class="benefits-list">
+                    <li><strong>Ultra-Low Latency:</strong> Sub-3ms processing delay ensures real-time responsiveness</li>
+                    <li><strong>High Channel Density:</strong> Support for 64 simultaneous input channels</li>
+                    <li><strong>Professional Quality:</strong> 24-bit/96kHz resolution with 120dB dynamic range</li>
+                    <li><strong>Intelligent Buffering:</strong> Adaptive buffer management prevents dropouts</li>
+                    <li><strong>Format Flexibility:</strong> Compatible with all major digital audio standards</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Technical Specifications</h4>
+                <ul>
+                    <li><strong>Sample Rates:</strong> 44.1kHz, 48kHz, 88.2kHz, 96kHz</li>
+                    <li><strong>Bit Depth:</strong> 16, 20, 24, 32-bit (integer and float)</li>
+                    <li><strong>Input Channels:</strong> Up to 64 simultaneous channels</li>
+                    <li><strong>Latency:</strong> < 3ms total system latency</li>
+                    <li><strong>Dynamic Range:</strong> 120dB A-weighted</li>
+                    <li><strong>Frequency Response:</strong> 10Hz - 40kHz (±0.1dB)</li>
+                    <li><strong>Supported Formats:</strong> ASIO, Core Audio, JACK, DirectSound</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Capture Detail Page -->
+    <div id="audio-capture-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">Audio Capture Engine</h1>
+            <div class="detail-subtitle">High-Fidelity Digital Signal Acquisition</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>Capture Technology</h3>
+                <p>Our Audio Capture Engine utilizes state-of-the-art analog-to-digital conversion technology combined with intelligent signal conditioning to ensure optimal signal integrity throughout the capture process. The system employs advanced oversampling techniques and sophisticated anti-aliasing filters to maintain the highest possible audio fidelity.</p>
+                
+                <p>The capture engine features adaptive gain staging that automatically optimizes input levels to maximize signal-to-noise ratio while preventing digital clipping. This intelligent approach ensures consistent audio quality across varying input conditions and source material types.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Advanced Features</h3>
+                <ul class="benefits-list">
+                    <li><strong>Adaptive Gain Staging:</strong> Automatic level optimization for maximum dynamic range</li>
+                    <li><strong>Digital Anti-Aliasing:</strong> Advanced filtering prevents frequency folding artifacts</li>
+                    <li><strong>Oversampling Technology:</strong> 4x oversampling for superior conversion quality</li>
+                    <li><strong>Phase-Coherent Processing:</strong> Maintains timing relationships across all channels</li>
+                    <li><strong>Real-time Monitoring:</strong> Comprehensive metering and signal analysis</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Performance Specifications</h4>
+                <ul>
+                    <li><strong>ADC Resolution:</strong> 32-bit Delta-Sigma conversion</li>
+                    <li><strong>Oversampling Ratio:</strong> 4x with digital decimation filtering</li>
+                    <li><strong>THD+N:</strong> < -110dB @ 1kHz, -1dBFS</li>
+                    <li><strong>Crosstalk:</strong> < -120dB between adjacent channels</li>
+                    <li><strong>Phase Accuracy:</strong> ±1° across all channels</li>
+                    <li><strong>Jitter Rejection:</strong> > 100dB @ 1kHz</li>
+                    <li><strong>Input Impedance:</strong> 10kΩ balanced, 5kΩ unbalanced</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Analyzer Detail Page -->
+    <div id="audio-analyzer-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">Audio Analyzer</h1>
+            <div class="detail-subtitle">Real-Time Spectral Analysis & Feature Extraction</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>Analysis Engine</h3>
+                <p>The Audio Analyzer provides comprehensive real-time analysis of the incoming audio signal, extracting critical acoustic features that inform our optimization algorithms. Using advanced DSP techniques including FFT analysis, wavelet transforms, and psychoacoustic modeling, the system generates detailed spectral and temporal characteristics of the live audio.</p>
+                
+                <p>Our analysis engine processes audio in overlapping time windows to provide smooth, continuous analysis without artifacts. The system tracks over 200 distinct audio features including spectral centroid, harmonic content, dynamic range, and spatial characteristics across all frequency bands.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Analysis Capabilities</h3>
+                <ul class="benefits-list">
+                    <li><strong>Real-Time FFT Analysis:</strong> 4096-point FFT with 75% overlap for smooth analysis</li>
+                    <li><strong>Psychoacoustic Modeling:</strong> Perceptually-weighted analysis based on human hearing</li>
+                    <li><strong>Multi-Band Processing:</strong> 31-band analysis covering 20Hz to 20kHz</li>
+                    <li><strong>Harmonic Detection:</strong> Intelligent identification of fundamental and harmonic content</li>
+                    <li><strong>Spatial Analysis:</strong> Stereo field analysis and phase correlation measurement</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Analysis Specifications</h4>
+                <ul>
+                    <li><strong>FFT Size:</strong> 4096 points with 75% overlap</li>
+                    <li><strong>Frequency Bands:</strong> 31-band 1/3 octave analysis</li>
+                    <li><strong>Update Rate:</strong> 200Hz analysis refresh rate</li>
+                    <li><strong>Dynamic Range:</strong> 144dB analysis range</li>
+                    <li><strong>Frequency Resolution:</strong> 0.1Hz bin resolution</li>
+                    <li><strong>Phase Accuracy:</strong> 0.1° phase measurement precision</li>
+                    <li><strong>Feature Extraction:</strong> 200+ simultaneous audio features</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quality Scoring Detail Page -->
+    <div id="quality-scoring-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">Quality Scoring System</h1>
+            <div class="detail-subtitle">AI-Powered Audio Quality Assessment</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>AI Quality Assessment</h3>
+                <p>Our Quality Scoring System employs advanced machine learning algorithms trained on thousands of hours of live audio performances to provide objective, real-time assessment of audio quality. The system evaluates multiple dimensions of audio quality including clarity, balance, spatial imaging, and overall aesthetic appeal.</p>
+                
+                <p>The AI model considers both technical metrics and perceptual factors, weighing elements such as frequency response, dynamic range, harmonic distortion, and spatial characteristics against learned patterns from high-quality reference recordings. This comprehensive approach provides actionable quality scores that directly inform optimization decisions.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Scoring Dimensions</h3>
+                <ul class="benefits-list">
+                    <li><strong>Spectral Balance:</strong> Frequency distribution and tonal balance assessment</li>
+                    <li><strong>Dynamic Quality:</strong> Evaluation of dynamic range and transient response</li>
+                    <li><strong>Spatial Imaging:</strong> Stereo field width and localization accuracy</li>
+                    <li><strong>Harmonic Content:</strong> Assessment of harmonic distortion and artifacts</li>
+                    <li><strong>Perceptual Quality:</strong> Overall subjective quality based on psychoacoustic models</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>AI Model Specifications</h4>
+                <ul>
+                    <li><strong>Training Data:</strong> 10,000+ hours of professionally mixed audio</li>
+                    <li><strong>Model Architecture:</strong> Deep neural network with attention mechanism</li>
+                    <li><strong>Quality Dimensions:</strong> 5 primary quality vectors</li>
+                    <li><strong>Inference Speed:</strong> < 10ms per quality assessment</li>
+                    <li><strong>Accuracy:</strong> 94.7% correlation with expert ratings</li>
+                    <li><strong>Update Rate:</strong> 20Hz continuous quality scoring</li>
+                    <li><strong>Confidence Scoring:</strong> Bayesian uncertainty quantification</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Optimizer Detail Page -->
+    <div id="ai-optimizer-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">AI Optimizer</h1>
+            <div class="detail-subtitle">Bayesian Optimization for Audio Enhancement</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>Bayesian Optimization Engine</h3>
+                <p>The AI Optimizer represents the intelligent core of our system, employing sophisticated Bayesian optimization techniques to continuously improve audio quality. This advanced machine learning approach builds probabilistic models of the relationship between audio processing parameters and quality outcomes, enabling intelligent exploration of the optimization space.</p>
+                
+                <p>Unlike traditional optimization approaches that rely on predetermined rules, our Bayesian optimizer learns from each adjustment, building increasingly accurate models of what constitutes optimal audio quality for different musical content and acoustic environments. This adaptive approach ensures continuous improvement over time.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Optimization Features</h3>
+                <ul class="benefits-list">
+                    <li><strong>Gaussian Process Models:</strong> Probabilistic modeling of parameter-quality relationships</li>
+                    <li><strong>Acquisition Functions:</strong> Intelligent exploration vs. exploitation balance</li>
+                    <li><strong>Multi-Objective Optimization:</strong> Simultaneous optimization across multiple quality dimensions</li>
+                    <li><strong>Constraint Handling:</strong> Respect for physical and aesthetic limitations</li>
+                    <li><strong>Online Learning:</strong> Continuous model improvement from real-time feedback</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Algorithm Specifications</h4>
+                <ul>
+                    <li><strong>Optimization Method:</strong> Multi-objective Bayesian optimization</li>
+                    <li><strong>Kernel Function:</strong> Matérn 5/2 with automatic relevance determination</li>
+                    <li><strong>Acquisition Function:</strong> Expected improvement with uncertainty weighting</li>
+                    <li><strong>Parameter Space:</strong> 64-dimensional continuous optimization</li>
+                    <li><strong>Convergence Time:</strong> < 30 seconds for initial optimization</li>
+                    <li><strong>Update Frequency:</strong> 10Hz parameter adjustment rate</li>
+                    <li><strong>Memory Usage:</strong> Efficient sparse GP approximation</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-time Engine Detail Page -->
+    <div id="realtime-engine-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">Real-time Engine</h1>
+            <div class="detail-subtitle">Live Audio Processing & Parameter Control</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>Real-time Processing</h3>
+                <p>The Real-time Engine serves as the execution layer of our optimization pipeline, applying AI-determined parameter adjustments to the live audio stream with ultra-low latency. This high-performance processing engine utilizes multi-threaded architecture and SIMD optimization to ensure seamless real-time operation even under demanding processing loads.</p>
+                
+                <p>The engine employs sophisticated interpolation algorithms to ensure smooth parameter transitions, preventing audible artifacts during optimization adjustments. Advanced buffering and lookahead techniques maintain perfect timing relationships while allowing for complex processing operations.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Processing Capabilities</h3>
+                <ul class="benefits-list">
+                    <li><strong>Multi-band EQ:</strong> 31-band parametric equalization with AI-controlled parameters</li>
+                    <li><strong>Dynamic Processing:</strong> Intelligent compression and limiting with musical characteristics</li>
+                    <li><strong>Spatial Enhancement:</strong> Stereo field optimization and imaging control</li>
+                    <li><strong>Harmonic Enhancement:</strong> Subtle harmonic content optimization for warmth and presence</li>
+                    <li><strong>Adaptive Filtering:</strong> Context-aware filtering based on content analysis</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Engine Specifications</h4>
+                <ul>
+                    <li><strong>Processing Latency:</strong> < 2ms total processing delay</li>
+                    <li><strong>Sample Rate Support:</strong> Up to 192kHz with 32-bit precision</li>
+                    <li><strong>CPU Optimization:</strong> AVX2 and SSE4 SIMD instruction sets</li>
+                    <li><strong>Threading Model:</strong> Lock-free multi-threading with NUMA awareness</li>
+                    <li><strong>Parameter Resolution:</strong> 32-bit floating point precision</li>
+                    <li><strong>Interpolation:</strong> Smooth parameter transitions with 1ms time constants</li>
+                    <li><strong>Memory Footprint:</strong> < 100MB RAM usage for full processing chain</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- LV1 Console Detail Page -->
+    <div id="lv1-console-page" class="page detail-page">
+        <div class="detail-header">
+            <h1 class="detail-title">LV1 Console Integration</h1>
+            <div class="detail-subtitle">Hardware Control Surface Integration</div>
+        </div>
+
+        <div class="detail-content">
+            <div class="detail-section">
+                <h3>Hardware Integration</h3>
+                <p>The LV1 Console Integration module provides seamless connectivity with professional mixing consoles, particularly the Waves LV1 live mixing system. This integration allows sound engineers to maintain full control over the optimization process while benefiting from AI-assisted parameter suggestions and automated adjustments.</p>
+                
+                <p>Our bidirectional communication protocol ensures that manual console adjustments are immediately recognized by the AI system, allowing for collaborative human-AI mixing workflows. The integration preserves the engineer's creative control while providing intelligent assistance and optimization suggestions.</p>
+            </div>
+
+            <div class="detail-section">
+                <h3>Integration Features</h3>
+                <ul class="benefits-list">
+                    <li><strong>Bidirectional Control:</strong> Full parameter synchronization between AI and console</li>
+                    <li><strong>Override Protection:</strong> Manual adjustments take precedence over AI suggestions</li>
+                    <li><strong>Visual Feedback:</strong> Console displays show AI optimization status and confidence levels</li>
+                    <li><strong>Scene Management:</strong> Automatic scene switching based on detected content changes</li>
+                    <li><strong>Backup Systems:</strong> Automatic failover to manual control if AI system encounters issues</li>
+                </ul>
+            </div>
+
+            <div class="tech-specs">
+                <h4>Integration Specifications</h4>
+                <ul>
+                    <li><strong>Supported Consoles:</strong> Waves LV1, SoundGrid compatible systems</li>
+                    <li><strong>Communication Protocol:</strong> OSC over Ethernet with 1ms update rate</li>
+                    <li><strong>Parameter Mapping:</strong> Full console parameter set with intelligent grouping</li>
+                    <li><strong>Latency:</strong> < 5ms for parameter synchronization</li>
+                    <li><strong>Redundancy:</strong> Dual-path communication with automatic failover</li>
+                    <li><strong>Console Compatibility:</strong> Firmware 12.0+ required for full feature set</li>
+                    <li><strong>Network Requirements:</strong> Gigabit Ethernet with QoS prioritization</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Central Speaker Container -->
+    <div class="speaker-container" onclick="toggleModules()">
+        <div class="speaker-svg">
+            <img class="central-speaker" src="images/speaker.jpg">
+        </div>
+    </div>
+
+    <!-- Navigation Arrows -->
+    <div class="nav-arrows">
+        <div class="nav-arrow" id="prev-arrow" onclick="previousPage()">
+            <svg viewBox="0 0 24 24">
+                <path d="M15.41 7.41L14 6L8 12L14 18L15.41 16.59L10.83 12L15.41 7.41Z"/>
+            </svg>
+        </div>
+        <div class="nav-arrow" id="next-arrow" onclick="nextPage()">
+            <svg viewBox="0 0 24 24">
+                <path d="M8.59 16.59L10 18L16 12L10 6L8.59 7.41L13.17 12L8.59 16.59Z"/>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        // Page management
+        let currentPage = 1;
+        const totalPages = 9;
+        let modulesVisible = false;
+        
+        const pages = [
+            'main-page',
+            'author-page', 
+            'audio-input-page',
+            'audio-capture-page',
+            'audio-analyzer-page',
+            'quality-scoring-page',
+            'ai-optimizer-page',
+            'realtime-engine-page',
+            'lv1-console-page'
+        ];
+
+        // Initialize page
+        function init() {
+            updatePageIndicator();
+            updateNavigationArrows();
+            startStatisticsAnimation();
+            startActivityUpdates();
+        }
+
+        // Toggle modules visibility
+        function toggleModules() {
+            const pipeline = document.querySelector('.pipeline');
+            modulesVisible = !modulesVisible;
+            
+            if (modulesVisible) {
+                pipeline.classList.add('modules-visible');
+            } else {
+                pipeline.classList.remove('modules-visible');
+            }
+        }
+
+        // Navigation functions
+        function navigateToPage(pageNumber) {
+            if (pageNumber >= 1 && pageNumber <= totalPages) {
+                // Hide current page
+                document.getElementById(pages[currentPage - 1]).classList.remove('active');
+                
+                // Show new page
+                currentPage = pageNumber;
+                document.getElementById(pages[currentPage - 1]).classList.add('active');
+                
+                updatePageIndicator();
+                updateNavigationArrows();
+                
+                // Hide modules when navigating away from main page
+                if (currentPage !== 1) {
+                    modulesVisible = false;
+                    const pipeline = document.querySelector('.pipeline');
+                    if (pipeline) {
+                        pipeline.classList.remove('modules-visible');
+                    }
+                }
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                navigateToPage(currentPage + 1);
+            }
+        }
+
+        function previousPage() {
+            if (currentPage > 1) {
+                navigateToPage(currentPage - 1);
+            }
+        }
+
+        function updatePageIndicator() {
+            const indicator = document.getElementById('page-indicator');
+            if (indicator) {
+                indicator.textContent = `${currentPage} / ${totalPages}`;
+            }
+        }
+
+        function updateNavigationArrows() {
+            const prevArrow = document.getElementById('prev-arrow');
+            const nextArrow = document.getElementById('next-arrow');
+            
+            if (prevArrow) {
+                if (currentPage === 1) {
+                    prevArrow.classList.add('disabled');
+                } else {
+                    prevArrow.classList.remove('disabled');
+                }
+            }
+            
+            if (nextArrow) {
+                if (currentPage === totalPages) {
+                    nextArrow.classList.add('disabled');
+                } else {
+                    nextArrow.classList.remove('disabled');
+                }
+            }
+        }
+
+        // Statistics animation
+        function startStatisticsAnimation() {
+            const stats = {
+                latency: { element: 'latency', values: ['2.3ms', '2.1ms', '2.4ms', '2.2ms'], index: 0 },
+                quality: { element: 'quality', values: ['94.7%', '95.2%', '94.1%', '95.8%'], index: 0 },
+                optimization: { element: 'optimization', values: ['127 Hz', '134 Hz', '121 Hz', '142 Hz'], index: 0 },
+                channels: { element: 'channels', values: ['32/64', '28/64', '35/64', '31/64'], index: 0 },
+                cpu: { element: 'cpu', values: ['23%', '21%', '25%', '22%'], index: 0 }
+            };
+
+            setInterval(() => {
+                Object.keys(stats).forEach(key => {
+                    const stat = stats[key];
+                    const element = document.getElementById(stat.element);
+                    if (element) {
+                        element.textContent = stat.values[stat.index];
+                        stat.index = (stat.index + 1) % stat.values.length;
+                    }
+                });
+            }, 2000);
+        }
+
+        // Activity indicator updates
+        function startActivityUpdates() {
+            const activities = [
+                'System Ready - Awaiting Audio Input',
+                'Analyzing Audio Characteristics...',
+                'Optimizing Frequency Response...',
+                'Applying Real-time Enhancements...',
+                'Quality Score: Excellent (96.2%)',
+                'AI Learning from Audio Content...'
+            ];
+            
+            let activityIndex = 0;
+            const activityElement = document.getElementById('activity');
+            
+            setInterval(() => {
+                if (activityElement) {
+                    activityElement.textContent = activities[activityIndex];
+                    activityIndex = (activityIndex + 1) % activities.length;
+                }
+            }, 3000);
+        }
+
+        // Module processing animation
+        function processModule(moduleElement) {
+            moduleElement.classList.add('processing');
+            setTimeout(() => {
+                moduleElement.classList.remove('processing');
+            }, 1200);
+        }
+
+        // Simulate processing when modules are clicked
+        document.addEventListener('DOMContentLoaded', () => {
+            const modules = document.querySelectorAll('.module');
+            modules.forEach(module => {
+                module.addEventListener('click', (e) => {
+                    // Don't process if we're navigating
+                    if (e.target.closest('.module')) {
+                        processModule(module);
+                    }
+                });
+            });
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowLeft':
+                    previousPage();
+                    break;
+                case 'ArrowRight':
+                    nextPage();
+                    break;
+                case ' ': // Spacebar
+                    if (currentPage === 1) {
+                        toggleModules();
+                    }
+                    e.preventDefault();
+                    break;
+                case 'Escape':
+                    if (currentPage !== 1) {
+                        navigateToPage(1);
+                    }
+                    break;
+            }
+        });
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+
+        // Handle window resize for responsive behavior
+        window.addEventListener('resize', () => {
+            // Force redraw of animations on resize
+            const pipeline = document.querySelector('.pipeline');
+            if (pipeline && modulesVisible) {
+                pipeline.classList.remove('modules-visible');
+                setTimeout(() => {
+                    pipeline.classList.add('modules-visible');
+                }, 50);
+            }
+        });
+
+        // Touch support for mobile devices
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // Only handle horizontal swipes if they're more significant than vertical
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+                if (deltaX > 0) {
+                    // Swipe right - go to previous page
+                    previousPage();
+                } else {
+                    // Swipe left - go to next page
+                    nextPage();
+                }
+            }
+        });
+
+        // Performance optimization: Pause animations on inactive pages
+        document.addEventListener('visibilitychange', () => {
+            const pipeline = document.querySelector('.pipeline');
+            if (document.hidden) {
+                // Page is hidden, reduce animations
+                document.body.style.animationPlayState = 'paused';
+            } else {
+                // Page is visible, resume animations
+                document.body.style.animationPlayState = 'running';
+            }
+        });
+    </script>
+</body>
+</html>
